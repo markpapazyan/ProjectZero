@@ -47,6 +47,7 @@ function noteToFreq(note, octave) {
 
 function playNote(freq, when = 0, duration = 1.2) {
   const ctx = getAudioContext();
+  ctx.resume(); // Required for iOS Safari: AudioContext starts suspended
   const t = ctx.currentTime + when;
 
   // Oscillator mix for piano-like tone
