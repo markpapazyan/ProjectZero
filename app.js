@@ -45,12 +45,9 @@ function noteToFreq(note, octave) {
   return 440 * Math.pow(2, halfStepsFromA4 / 12);
 }
 
-function playNote(freq, when = 0, duration = 1.2) {
-  const ctx = getAudioContext();
-  ctx.resume(); // Required for iOS Safari: AudioContext starts suspended
+function scheduleNote(ctx, freq, when, duration) {
   const t = ctx.currentTime + when;
 
-  // Oscillator mix for piano-like tone
   const osc1 = ctx.createOscillator();
   const osc2 = ctx.createOscillator();
   const gainNode = ctx.createGain();
@@ -59,7 +56,7 @@ function playNote(freq, when = 0, duration = 1.2) {
   osc1.type = 'triangle';
   osc2.type = 'sine';
   osc1.frequency.value = freq;
-  osc2.frequency.value = freq * 2; // octave harmonic
+  osc2.frequency.value = freq * 2;
 
   osc1.connect(gainNode);
   osc2.connect(gainNode);
@@ -77,6 +74,13 @@ function playNote(freq, when = 0, duration = 1.2) {
   osc2.stop(t + duration);
 }
 
+// Returns a promise that resolves once audio is scheduled.
+// Must be called from within a user gesture handler for iOS Safari.
+function playNote(freq, when = 0, duration = 1.2) {
+  const ctx = getAudioContext();
+  return ctx.resume().then(() => scheduleNote(ctx, freq, when, duration));
+}
+
 // ===== State =====
 let selectedRoot = 'C';
 let selectedChordType = 'major';
@@ -84,6 +88,8 @@ let quizScore = 0;
 let quizTotal = 0;
 let quizAnswer = null;
 let quizAnswered = false;
+let quizPlayRoot = null;
+let quizPlayChordType = null;
 
 // ===== Helpers =====
 function getChordNotes(root, chordType) {
@@ -259,14 +265,15 @@ function updateChordDisplay() {
 
 // ===== Playback =====
 function playChord(root, chordType, arpeggiate = false) {
-  const notesFull = getChordNotesFull(root, chordType);
-  if (arpeggiate) {
-    notesFull.forEach((n, i) => {
-      playNote(noteToFreq(n.note, n.octave), i * 0.18, 1.4);
-    });
-  } else {
-    notesFull.forEach(n => playNote(noteToFreq(n.note, n.octave), 0, 1.5));
-  }
+  const ctx = getAudioContext();
+  ctx.resume().then(() => {
+    const notesFull = getChordNotesFull(root, chordType);
+    if (arpeggiate) {
+      notesFull.forEach((n, i) => scheduleNote(ctx, noteToFreq(n.note, n.octave), i * 0.18, 1.4));
+    } else {
+      notesFull.forEach(n => scheduleNote(ctx, noteToFreq(n.note, n.octave), 0, 1.5));
+    }
+  });
 }
 
 // ===== Tabs =====
@@ -317,8 +324,9 @@ function startQuiz() {
     const wrongs = getWrongOptions(chordType, 3, 'identify-chord');
     const allOptions = [chordType, ...wrongs].sort(() => Math.random() - 0.5);
     optionValues = allOptions.map(k => ({ value: k, label: CHORD_TYPES[k].label }));
-    // Play the chord
-    setTimeout(() => playChord(root, chordType), 300);
+    // Store for the play button (auto-play blocked on iOS outside user gesture)
+    quizPlayRoot = root;
+    quizPlayChordType = chordType;
   } else if (qType === 'identify-notes') {
     prompt = `Which notes are in a ${root} ${chord.label} chord?`;
     correctAnswer = notes.join(', ');
@@ -357,6 +365,14 @@ function startQuiz() {
   document.getElementById('quiz-prompt').textContent = prompt;
   document.getElementById('quiz-feedback').classList.add('hidden');
   document.getElementById('quiz-next-btn').classList.add('hidden');
+
+  // Show play button only for listen-and-identify questions
+  const playBtn = document.getElementById('quiz-play-btn');
+  if (qType === 'identify-chord') {
+    playBtn.classList.remove('hidden');
+  } else {
+    playBtn.classList.add('hidden');
+  }
 
   const optionsEl = document.getElementById('quiz-options');
   optionsEl.innerHTML = '';
@@ -423,6 +439,9 @@ function init() {
 
   document.getElementById('quiz-start-btn').addEventListener('click', startQuiz);
   document.getElementById('quiz-next-btn').addEventListener('click', startQuiz);
+  document.getElementById('quiz-play-btn').addEventListener('click', () => {
+    if (quizPlayRoot && quizPlayChordType) playChord(quizPlayRoot, quizPlayChordType);
+  });
 }
 
 document.addEventListener('DOMContentLoaded', init);
