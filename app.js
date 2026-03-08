@@ -30,60 +30,30 @@ const NUM_OCTAVES = 2;
 const WHITE_NOTE_ORDER = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
 const BLACK_NOTE_ORDER = ['C#', 'D#', null, 'F#', 'G#', 'A#', null]; // null = no black key
 
-// ===== Audio =====
-let audioCtx = null;
+// ===== Audio (Tone.js) =====
+let _synth = null;
 
-function getAudioContext() {
-  if (!audioCtx) {
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    // Unlock AudioContext on first user gesture (required by browser autoplay policy)
-    const resume = () => audioCtx.resume();
-    document.addEventListener('mousedown', resume, { once: true });
-    document.addEventListener('touchstart', resume, { once: true });
+function getSynth() {
+  if (!_synth) {
+    _synth = new Tone.PolySynth(Tone.Synth, {
+      oscillator: { type: 'triangle' },
+      envelope: { attack: 0.01, decay: 0.3, sustain: 0.4, release: 1.2 }
+    }).toDestination();
+    _synth.volume.value = -6;
   }
-  return audioCtx;
+  return _synth;
 }
 
 function noteToFreq(note, octave) {
   const semitone = NOTES.indexOf(note);
-  // A4 = 440 Hz, A is index 9 in octave 4
   const halfStepsFromA4 = (octave - 4) * 12 + (semitone - 9);
   return 440 * Math.pow(2, halfStepsFromA4 / 12);
 }
 
-function scheduleNote(ctx, freq, when, duration) {
-  // Add 50ms buffer to ensure we never schedule in the past
-  const t = ctx.currentTime + when + 0.05;
-
-  const osc1 = ctx.createOscillator();
-  const osc2 = ctx.createOscillator();
-  const masterGain = ctx.createGain();
-
-  osc1.type = 'triangle';
-  osc2.type = 'sine';
-  osc1.frequency.value = freq;
-  osc2.frequency.value = freq * 2;
-
-  osc1.connect(masterGain);
-  osc2.connect(masterGain);
-  masterGain.connect(ctx.destination);
-
-  masterGain.gain.setValueAtTime(0, t);
-  masterGain.gain.linearRampToValueAtTime(0.4, t + 0.01);
-  masterGain.gain.exponentialRampToValueAtTime(0.15, t + 0.3);
-  masterGain.gain.exponentialRampToValueAtTime(0.001, t + duration);
-
-  osc1.start(t);
-  osc2.start(t);
-  osc1.stop(t + duration);
-  osc2.stop(t + duration);
-}
-
-// Returns a promise that resolves once audio is scheduled.
-// Must be called from within a user gesture handler for iOS Safari.
 function playNote(freq, when = 0, duration = 1.2) {
-  const ctx = getAudioContext();
-  return ctx.resume().then(() => scheduleNote(ctx, freq, when, duration)).catch(err => console.error('Audio playback failed:', err));
+  Tone.start().then(() => {
+    getSynth().triggerAttackRelease(freq, duration, Tone.now() + when);
+  });
 }
 
 // ===== State =====
@@ -278,15 +248,15 @@ function updateChordDisplay() {
 
 // ===== Playback =====
 function playChord(root, chordType, arpeggiate = false) {
-  const ctx = getAudioContext();
-  ctx.resume().then(() => {
+  Tone.start().then(() => {
     const notesFull = getChordNotesFull(root, chordType);
+    const s = getSynth();
     if (arpeggiate) {
-      notesFull.forEach((n, i) => scheduleNote(ctx, noteToFreq(n.note, n.octave), i * 0.18, 1.4));
+      notesFull.forEach((n, i) => s.triggerAttackRelease(noteToFreq(n.note, n.octave), 1.4, Tone.now() + i * 0.18));
     } else {
-      notesFull.forEach(n => scheduleNote(ctx, noteToFreq(n.note, n.octave), 0, 1.5));
+      s.triggerAttackRelease(notesFull.map(n => noteToFreq(n.note, n.octave)), 1.5);
     }
-  }).catch(err => console.error('Audio playback failed:', err));
+  });
 }
 
 // ===== Tabs =====
