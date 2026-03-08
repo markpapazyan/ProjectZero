@@ -2,23 +2,23 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
-  --bg: #0f0f14;
-  --surface: #1a1a24;
-  --surface2: #22222f;
-  --border: #2e2e40;
+  --bg: #f0f2f8;
+  --surface: #ffffff;
+  --surface2: #eef0f7;
+  --border: #d0d4e8;
   --accent: #7c5cbf;
-  --accent-light: #9b7de0;
-  --accent-glow: rgba(124, 92, 191, 0.35);
-  --green: #3ecf8e;
-  --green-glow: rgba(62, 207, 142, 0.3);
-  --red: #f56565;
-  --red-glow: rgba(245, 101, 101, 0.3);
-  --text: #e2e2f0;
-  --text-muted: #888899;
+  --accent-light: #6b47b0;
+  --accent-glow: rgba(124, 92, 191, 0.25);
+  --green: #1e9e6b;
+  --green-glow: rgba(30, 158, 107, 0.25);
+  --red: #d93b3b;
+  --red-glow: rgba(217, 59, 59, 0.25);
+  --text: #1a1a2e;
+  --text-muted: #6b6b88;
   --white-key: #f5f5f0;
   --black-key: #1a1a1f;
   --highlight: #7c5cbf;
-  --highlight-root: #e0b43a;
+  --highlight-root: #c4920a;
   --font: 'Segoe UI', system-ui, sans-serif;
 }
 
@@ -347,8 +347,8 @@ select:focus { border-color: var(--accent-light); }
   width: 46px;
   height: 170px;
   background: var(--white-key);
-  border: 1px solid #bbb;
-  border-top: 2px solid #ccc;
+  border: 1px solid #c8c8c0;
+  border-top: 2px solid #d8d8d0;
   z-index: 1;
   display: flex;
   flex-direction: column;
