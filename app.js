@@ -30,29 +30,40 @@ const NUM_OCTAVES = 2;
 const WHITE_NOTE_ORDER = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
 const BLACK_NOTE_ORDER = ['C#', 'D#', null, 'F#', 'G#', 'A#', null]; // null = no black key
 
-// ===== Audio (Tone.js) =====
-let _synth = null;
+// ===== Audio (soundfont-player — real piano samples) =====
+let _audioCtx = null;
+let _pianoPromise = null;
 
-function getSynth() {
-  if (!_synth) {
-    _synth = new Tone.PolySynth(Tone.Synth, {
-      oscillator: { type: 'triangle' },
-      envelope: { attack: 0.01, decay: 0.3, sustain: 0.4, release: 1.2 }
-    }).toDestination();
-    _synth.volume.value = -6;
-  }
-  return _synth;
+function getAudioCtx() {
+  if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return _audioCtx;
 }
 
+function getPiano() {
+  if (!_pianoPromise) {
+    const ctx = getAudioCtx();
+    _pianoPromise = ctx.resume().then(() =>
+      Soundfont.instrument(ctx, 'acoustic_grand_piano', { soundfont: 'MusyngKite', format: 'mp3' })
+    );
+  }
+  return _pianoPromise;
+}
+
+// Convert note + octave to MIDI number (C4 = 60)
+function toMidi(note, octave) {
+  return 12 * (octave + 1) + NOTES.indexOf(note);
+}
+
+// Keep noteToFreq for any callers that still use it
 function noteToFreq(note, octave) {
   const semitone = NOTES.indexOf(note);
-  const halfStepsFromA4 = (octave - 4) * 12 + (semitone - 9);
-  return 440 * Math.pow(2, halfStepsFromA4 / 12);
+  return 440 * Math.pow(2, ((octave - 4) * 12 + (semitone - 9)) / 12);
 }
 
-function playNote(freq, when = 0, duration = 1.2) {
-  Tone.start().then(() => {
-    getSynth().triggerAttackRelease(freq, duration, Tone.now() + when);
+function playNote(note, octave, when = 0, duration = 1.5) {
+  getPiano().then(piano => {
+    const ctx = getAudioCtx();
+    piano.play(toMidi(note, octave), ctx.currentTime + when, { duration, gain: 3 });
   });
 }
 
@@ -161,8 +172,7 @@ function handleKeyClick(note, octave, keyEl) {
   setTimeout(() => keyEl.classList.remove('pressed'), 200);
 
   // Play note
-  const freq = noteToFreq(note, parseInt(octave));
-  playNote(freq);
+  playNote(note, parseInt(octave));
 }
 
 function highlightChord(root, chordType) {
@@ -248,13 +258,17 @@ function updateChordDisplay() {
 
 // ===== Playback =====
 function playChord(root, chordType, arpeggiate = false) {
-  Tone.start().then(() => {
+  getPiano().then(piano => {
+    const ctx = getAudioCtx();
     const notesFull = getChordNotesFull(root, chordType);
-    const s = getSynth();
     if (arpeggiate) {
-      notesFull.forEach((n, i) => s.triggerAttackRelease(noteToFreq(n.note, n.octave), 1.4, Tone.now() + i * 0.18));
+      notesFull.forEach((n, i) =>
+        piano.play(toMidi(n.note, n.octave), ctx.currentTime + i * 0.18, { duration: 1.4, gain: 3 })
+      );
     } else {
-      s.triggerAttackRelease(notesFull.map(n => noteToFreq(n.note, n.octave)), 1.5);
+      notesFull.forEach(n =>
+        piano.play(toMidi(n.note, n.octave), ctx.currentTime, { duration: 1.5, gain: 3 })
+      );
     }
   });
 }
@@ -427,4 +441,9 @@ function init() {
   });
 }
 
-document.addEventListener('DOMContentLoaded', init);
+document.addEventListener('DOMContentLoaded', () => {
+  init();
+  // Pre-load piano samples on first user interaction
+  document.addEventListener('mousedown', () => getPiano(), { once: true });
+  document.addEventListener('touchstart', () => getPiano(), { once: true });
+});
