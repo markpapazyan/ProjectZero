@@ -34,7 +34,13 @@ const BLACK_NOTE_ORDER = ['C#', 'D#', null, 'F#', 'G#', 'A#', null]; // null = n
 let audioCtx = null;
 
 function getAudioContext() {
-  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    // Unlock AudioContext on first user gesture (required by browser autoplay policy)
+    const resume = () => audioCtx.resume();
+    document.addEventListener('mousedown', resume, { once: true });
+    document.addEventListener('touchstart', resume, { once: true });
+  }
   return audioCtx;
 }
 
@@ -46,11 +52,11 @@ function noteToFreq(note, octave) {
 }
 
 function scheduleNote(ctx, freq, when, duration) {
-  const t = ctx.currentTime + when;
+  // Add 50ms buffer to ensure we never schedule in the past
+  const t = ctx.currentTime + when + 0.05;
 
   const osc1 = ctx.createOscillator();
   const osc2 = ctx.createOscillator();
-  const gainNode = ctx.createGain();
   const masterGain = ctx.createGain();
 
   osc1.type = 'triangle';
@@ -58,14 +64,13 @@ function scheduleNote(ctx, freq, when, duration) {
   osc1.frequency.value = freq;
   osc2.frequency.value = freq * 2;
 
-  osc1.connect(gainNode);
-  osc2.connect(gainNode);
-  gainNode.connect(masterGain);
+  osc1.connect(masterGain);
+  osc2.connect(masterGain);
   masterGain.connect(ctx.destination);
 
   masterGain.gain.setValueAtTime(0, t);
-  masterGain.gain.linearRampToValueAtTime(0.22, t + 0.01);
-  masterGain.gain.exponentialRampToValueAtTime(0.08, t + 0.3);
+  masterGain.gain.linearRampToValueAtTime(0.4, t + 0.01);
+  masterGain.gain.exponentialRampToValueAtTime(0.15, t + 0.3);
   masterGain.gain.exponentialRampToValueAtTime(0.001, t + duration);
 
   osc1.start(t);
@@ -78,7 +83,7 @@ function scheduleNote(ctx, freq, when, duration) {
 // Must be called from within a user gesture handler for iOS Safari.
 function playNote(freq, when = 0, duration = 1.2) {
   const ctx = getAudioContext();
-  return ctx.resume().then(() => scheduleNote(ctx, freq, when, duration));
+  return ctx.resume().then(() => scheduleNote(ctx, freq, when, duration)).catch(err => console.error('Audio playback failed:', err));
 }
 
 // ===== State =====
@@ -145,6 +150,10 @@ function buildKeyboard() {
       key.appendChild(label);
 
       key.addEventListener('mousedown', () => handleKeyClick(noteName, oct, key));
+      key.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        handleKeyClick(noteName, oct, key);
+      }, { passive: false });
       keyboard.appendChild(key);
     });
 
@@ -162,6 +171,10 @@ function buildKeyboard() {
       key.appendChild(label);
 
       key.addEventListener('mousedown', () => handleKeyClick(note, oct, key));
+      key.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        handleKeyClick(note, oct, key);
+      }, { passive: false });
       keyboard.appendChild(key);
     });
   }
@@ -273,7 +286,7 @@ function playChord(root, chordType, arpeggiate = false) {
     } else {
       notesFull.forEach(n => scheduleNote(ctx, noteToFreq(n.note, n.octave), 0, 1.5));
     }
-  });
+  }).catch(err => console.error('Audio playback failed:', err));
 }
 
 // ===== Tabs =====
